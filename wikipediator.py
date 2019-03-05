@@ -13,10 +13,10 @@ open_browser = False     # turn on to open browser page instead of printing the 
 
 
 def main():
-    ProcessInput()
-    # RunEvaluation()
+    processInput()
+    # runEvaluation()
 
-def ProcessInput():
+def processInput():
     include_summary = True
     wiki = Wikipediator()
     with open("input.txt") as f:
@@ -28,7 +28,7 @@ def ProcessInput():
             else:
                 print "    URL is: ", url
 
-def RunEvaluation():
+def runEvaluation():
     include_summary = False
     passed, failed = 0, 0
     wiki = Wikipediator()
