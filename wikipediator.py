@@ -22,7 +22,7 @@ def ProcessInput():
     with open("input.txt") as f:
         for i, line in enumerate(f):
             print "\nProcessing line %d:\n" % (i+1)
-            url = wiki.GetWikiPage(line)
+            url = wiki.getWikiPage(line)
             if open_browser:
                 webbrowser.open_new(url)
             else:
@@ -38,7 +38,7 @@ def RunEvaluation():
             try:
                 summaryText = wikipedia.summary(line, auto_suggest = True)
                 actualUrl = wikipedia.page(line, auto_suggest = True).url
-                url = wiki.GetWikiPage(summaryText)
+                url = wiki.getWikiPage(summaryText)
                 if actualUrl == url:
                     print "Evaluation line %d  -  test PASSED." % (i+1)
                     passed += 1
@@ -60,23 +60,23 @@ class Wikipediator:
     def __init__(self):
         self.uniLM = UnigramLM()
         corpus = brown.sents()[:10000]
-        self.uniLM.EstimateUnigrams(corpus)
+        self.uniLM.estimateUnigrams(corpus)
 
-    def GetWikiPage(self, query):
-        queryToks = word_tokenize(self.CleanString(query))
+    def getWikiPage(self, query):
+        queryToks = word_tokenize(self.cleanString(query))
         tagged_toks = pos_tag(queryToks)
         
-        phraseCounts = self.ExtractNounPhrases(tagged_toks)
-        wikiPages = self.CollectWikiPages(phraseCounts)
+        phraseCounts = self.extractNounPhrases(tagged_toks)
+        wikiPages = self.collectWikiPages(phraseCounts)
 
         tfidf = TfidfModel(phraseCounts, wikiPages)
-        return tfidf.GetMostSimilarDoc()
+        return tfidf.getMostSimilarDoc()
 
-    def CleanString(self, string):
+    def cleanString(self, string):
         # use a whitelist to filter out unknown characters:
         return re.sub('''[^\s\w\d\?><;,\{\}\[\]\-_\+=!@\#\$%^&\*\|\']''', '', string).decode('utf-8')
 
-    def ExtractNounPhrases(self, tagged_toks):
+    def extractNounPhrases(self, tagged_toks):
         commonNPcounts, properNPcounts = defaultdict(int), defaultdict(int)
         grammar = r"""
             NP_common:  {<NN|NNS|JJ.*>*<NN|NNS>}    # catches JJ-NN noun phrases
@@ -94,25 +94,25 @@ class Wikipediator:
             elif npTree.label() == "NP_proper":
                 properNPcounts[TreeToTuple(npTree)] += 1
 
-        phraseCounts = self.PrunePhrases(commonNPcounts, properNPcounts)
+        phraseCounts = self.prunePhrases(commonNPcounts, properNPcounts)
         return phraseCounts
 
-    def PrunePhrases(self, commonNPcounts, properNPcounts):
+    def prunePhrases(self, commonNPcounts, properNPcounts):
         commonNPcounts, properNPcounts = list(commonNPcounts.iteritems()), list(properNPcounts.iteritems())
         
-        def PruneProperNPs(phraseCounts, size):
+        def pruneProperNPs(phraseCounts, size):
             return nlargest(size, phraseCounts, key = lambda (phrase, count): count)
 
-        def PruneCommonNPs(phraseCounts, size):
-            return nlargest(size, phraseCounts, key = lambda (phrase, count): -self.uniLM.PhraseLogProbability(phrase))
+        def pruneCommonNPs(phraseCounts, size):
+            return nlargest(size, phraseCounts, key = lambda (phrase, count): -self.uniLM.phraseLogProbability(phrase))
 
         phrases_left = phrase_limit
-        properNPcounts = PruneProperNPs(properNPcounts, phrases_left)
+        properNPcounts = pruneProperNPs(properNPcounts, phrases_left)
         phrases_left -= len(properNPcounts)
-        commonNPcounts = PruneCommonNPs(commonNPcounts, phrases_left)
+        commonNPcounts = pruneCommonNPs(commonNPcounts, phrases_left)
         return properNPcounts + commonNPcounts
 
-    def CollectWikiPages(self, phraseCounts):
+    def collectWikiPages(self, phraseCounts):
         wikiPages = dict()
         for phrase, count in phraseCounts:
             phraseStr = " ".join(phrase)
@@ -122,7 +122,7 @@ class Wikipediator:
                 if not include_summary:    # note: the summary is a prefix of the full page content
                     summary = wikipedia.summary(phraseStr, auto_suggest = True)
                     content = content[len(summary):]    # effectively cuts out the summary part of the page
-                wikiPages[page.url] = word_tokenize(self.CleanString(content))
+                wikiPages[page.url] = word_tokenize(self.cleanString(content))
             except (wikipedia.exceptions.DisambiguationError, wikipedia.exceptions.PageError):
                 continue
         return list(wikiPages.iteritems())
@@ -136,7 +136,7 @@ class UnigramLM:
         self.unigram_counts = defaultdict(lambda: 1.0)   # starting count is 1 (Laplace smoothing)
         self.token_count = 0
 
-    def EstimateUnigrams(self, data_set):
+    def estimateUnigrams(self, data_set):
         self.clearCounts()
         for sent in data_set:
             for word in sent:
@@ -144,7 +144,7 @@ class UnigramLM:
                 self.unigram_counts[word] += 1
         self.token_count += len(self.unigram_counts)    # normalize for Laplace smoothing
 
-    def PhraseLogProbability(self, phrase):
+    def phraseLogProbability(self, phrase):
         log_prob = 0.0
         for word in phrase:
             log_prob += log(self.unigram_counts[word.lower()] / self.token_count)
@@ -160,11 +160,11 @@ class TfidfModel:
         self.cosSims        = defaultdict(float)      # docUrl: cosSim
         self.mostSimilarDocUrl = ""
 
-        self.GetQueryTf(queryPhraseCounts)
-        self.GetDocsTfidf(collection)
-        self.GetCosineSimilarities()
+        self.getQueryTf(queryPhraseCounts)
+        self.getDocsTfidf(collection)
+        self.getCosineSimilarities()
 
-    def GetQueryTf(self, queryPhraseCounts):
+    def getQueryTf(self, queryPhraseCounts):
         queryLen = 0.0
         for phrase, count in queryPhraseCounts:
             for word in phrase:
@@ -175,7 +175,7 @@ class TfidfModel:
         for word, count in self.queryTfs.iteritems():
             self.queryTfs[word] = count / queryLen    # normalize query tfs
 
-    def GetDocsTfidf(self, collection):
+    def getDocsTfidf(self, collection):
         for url, doc in collection:
             docLen = len(doc)
             docTfs = defaultdict(float)
@@ -194,7 +194,7 @@ class TfidfModel:
         for word in self.vocabulary:
             self.idfs[word] = log(numDocs / (numDocsWithTerm[word] + 1))    # +1 prevents division by 0
 
-    def GetCosineSimilarities(self):
+    def getCosineSimilarities(self):
         qMag = 0.0
         for word in self.vocabulary:
             qMag += (self.queryTfs[word] * self.idfs[word]) ** 2
@@ -214,7 +214,7 @@ class TfidfModel:
                 maxSim = sim
                 self.mostSimilarDocUrl = url
 
-    def GetMostSimilarDoc(self):
+    def getMostSimilarDoc(self):
         return self.mostSimilarDocUrl
 
 
